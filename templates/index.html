@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Blog Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            max-width: 800px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 1.1em;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            text-align: center;
+            color: #667eea;
+            margin-top: 20px;
+            font-size: 1.1em;
+            display: none;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .blog-output {
+            margin-top: 30px;
+            padding: 25px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            display: none;
+        }
+
+        .blog-output h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.8em;
+        }
+
+        .blog-content {
+            color: #444;
+            line-height: 1.8;
+            white-space: pre-wrap;
+            font-size: 1.05em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 AI Blog Generator</h1>
+        <p class="subtitle">Enter a topic and let AI create a blog post for you</p>
+        
+        <!-- Form for blog topic input -->
+        <form id="blogForm">
+            <div class="form-group">
+                <label for="topic">Blog Topic:</label>
+                <input 
+                    type="text" 
+                    id="topic" 
+                    name="topic" 
+                    placeholder="e.g., The Future of Artificial Intelligence"
+                    required
+                >
+            </div>
+            <button type="submit" id="submitBtn">Generate Blog Post</button>
+        </form>
+
+        <!-- Loading indicator -->
+        <div class="loading" id="loading">
+            Generating your blog post... Please wait.
+        </div>
+
+        <!-- Error message display -->
+        <div class="error" id="error"></div>
+
+        <!-- Generated blog output -->
+        <div class="blog-output" id="blogOutput">
+            <h2>Generated Blog Post:</h2>
+            <div class="blog-content" id="blogContent"></div>
+        </div>
+    </div>
+
+    <script>
+        // Get references to DOM elements
+        const form = document.getElementById('blogForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const loading = document.getElementById('loading');
+        const error = document.getElementById('error');
+        const blogOutput = document.getElementById('blogOutput');
+        const blogContent = document.getElementById('blogContent');
+
+        // Handle form submission
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault(); // Prevent default form submission
+            
+            // Get the topic from the input field
+            const topic = document.getElementById('topic').value.trim();
+            
+            if (!topic) {
+                showError('Please enter a blog topic');
+                return;
+            }
+
+            // Hide previous results and errors
+            hideError();
+            hideBlogOutput();
+            
+            // Show loading state
+            showLoading();
+            submitBtn.disabled = true;
+
+            try {
+                // Create FormData to send the topic to the backend
+                const formData = new FormData();
+                formData.append('topic', topic);
+
+                // Send POST request to the Flask backend
+                const response = await fetch('/generate', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                // Parse the JSON response
+                const data = await response.json();
+
+                // Hide loading indicator
+                hideLoading();
+                submitBtn.disabled = false;
+
+                // Check if there was an error
+                if (!response.ok || data.error) {
+                    showError(data.error || 'Failed to generate blog post');
+                    return;
+                }
+
+                // Display the generated blog
+                if (data.blog) {
+                    showBlogOutput(data.blog);
+                } else {
+                    showError('No blog content received');
+                }
+
+            } catch (err) {
+                // Handle network or other errors
+                hideLoading();
+                submitBtn.disabled = false;
+                showError('Network error: ' + err.message);
+            }
+        });
+
+        // Helper functions to show/hide UI elements
+        function showLoading() {
+            loading.style.display = 'block';
+        }
+
+        function hideLoading() {
+            loading.style.display = 'none';
+        }
+
+        function showError(message) {
+            error.textContent = message;
+            error.style.display = 'block';
+        }
+
+        function hideError() {
+            error.style.display = 'none';
+        }
+
+        function showBlogOutput(content) {
+            blogContent.textContent = content;
+            blogOutput.style.display = 'block';
+            // Scroll to the blog output
+            blogOutput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function hideBlogOutput() {
+            blogOutput.style.display = 'none';
+        }
+    </script>
+</body>
+</html>
+

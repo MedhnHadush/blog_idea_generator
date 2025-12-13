@@ -1,0 +1,12 @@
+# AI Blog Generator - Python Dependencies
+# Install with: pip install -r requirements.txt
+
+# Flask - Web framework for the backend
+Flask==3.0.0
+
+# OpenAI - Official Python client for OpenAI API
+openai>=1.12.0
+
+# python-dotenv - Load environment variables from .env file
+python-dotenv==1.0.0
+
