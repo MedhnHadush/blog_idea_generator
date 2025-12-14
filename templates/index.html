@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Blog Generator</title>
+    <meta name="description" content="Generate engaging blog posts using AI. Enter a topic and get a professionally written blog post instantly.">
+    <meta name="keywords" content="AI blog generator, blog writer, content generator, OpenAI">
+    <title>AI Blog Generator - Create Blog Posts with AI</title>
     <style>
         * {
             margin: 0;
@@ -28,6 +30,32 @@
             max-width: 800px;
             width: 100%;
             padding: 40px;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+                margin: 10px;
+            }
+
+            h1 {
+                font-size: 2em;
+            }
+
+            .blog-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+
+            .blog-actions {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .button-group {
+                flex-direction: column;
+            }
         }
 
         h1 {
@@ -77,15 +105,21 @@
         input[type="text"] {
             width: 100%;
             padding: 12px 16px;
+            padding-right: 80px; /* Space for character counter */
             border: 2px solid #e0e0e0;
             border-radius: 8px;
             font-size: 1em;
-            transition: border-color 0.3s;
+            transition: border-color 0.3s, box-shadow 0.3s;
         }
 
         input[type="text"]:focus {
             outline: none;
             border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        input[type="text"]:invalid {
+            border-color: #ff6b6b;
         }
 
         button {
@@ -168,10 +202,34 @@
         .error {
             background: #fee;
             color: #c33;
-            padding: 12px;
+            padding: 12px 16px;
             border-radius: 8px;
             margin-top: 20px;
             display: none;
+            border-left: 4px solid #c33;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-top: 20px;
+            display: none;
+            border-left: 4px solid #28a745;
+            animation: slideIn 0.3s ease-out;
         }
 
         .blog-output {
@@ -232,6 +290,26 @@
             line-height: 1.8;
             white-space: pre-wrap;
             font-size: 1.05em;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+
+        /* Accessibility improvements */
+        button:focus,
+        input:focus {
+            outline: 2px solid #667eea;
+            outline-offset: 2px;
+        }
+
+        /* Loading animation improvement */
+        .loading p {
+            margin-top: 15px;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
         }
     </style>
 </head>
@@ -241,7 +319,7 @@
         <p class="subtitle">Enter a topic and let AI create a blog post for you</p>
         
         <!-- Form for blog topic input -->
-        <form id="blogForm">
+        <form id="blogForm" aria-label="Blog topic input form">
             <div class="form-group">
                 <label for="topic">Blog Topic:</label>
                 <div class="input-wrapper">
@@ -251,14 +329,25 @@
                         name="topic" 
                         placeholder="e.g., The Future of Artificial Intelligence"
                         maxlength="200"
+                        minlength="3"
                         required
+                        aria-required="true"
+                        aria-describedby="charCounter topicHelp"
+                        autocomplete="off"
                     >
-                    <span class="char-counter" id="charCounter">0/200</span>
+                    <span class="char-counter" id="charCounter" aria-live="polite">0/200</span>
                 </div>
+                <small id="topicHelp" style="color: #666; font-size: 0.9em; margin-top: 5px; display: block;">
+                    Enter a topic (3-200 characters) to generate a blog post
+                </small>
             </div>
             <div class="button-group">
-                <button type="submit" id="submitBtn">Generate Blog Post</button>
-                <button type="button" class="clear-btn" id="clearBtn" onclick="clearForm()">Clear</button>
+                <button type="submit" id="submitBtn" aria-label="Generate blog post">
+                    Generate Blog Post
+                </button>
+                <button type="button" class="clear-btn" id="clearBtn" onclick="clearForm()" aria-label="Clear form">
+                    Clear
+                </button>
             </div>
         </form>
 
@@ -269,19 +358,26 @@
         </div>
 
         <!-- Error message display -->
-        <div class="error" id="error"></div>
+        <div class="error" id="error" role="alert" aria-live="assertive"></div>
+        
+        <!-- Success message display -->
+        <div class="success-message" id="successMessage" role="status" aria-live="polite"></div>
 
         <!-- Generated blog output -->
         <div class="blog-output" id="blogOutput">
             <div class="blog-header">
                 <h2>Generated Blog Post:</h2>
                 <div class="blog-actions">
-                    <span class="word-count" id="wordCount"></span>
-                    <button class="copy-btn" id="copyBtn" onclick="copyToClipboard()">📋 Copy</button>
+                    <span class="word-count" id="wordCount" aria-live="polite"></span>
+                    <button class="copy-btn" id="copyBtn" onclick="copyToClipboard()" aria-label="Copy blog content to clipboard">
+                        📋 Copy
+                    </button>
                 </div>
             </div>
             <div class="blog-content" id="blogContent"></div>
-            <button class="generate-another-btn" id="generateAnotherBtn" onclick="generateAnother()" style="display: none;">✨ Generate Another Blog</button>
+            <button class="generate-another-btn" id="generateAnotherBtn" onclick="generateAnother()" style="display: none;" aria-label="Generate another blog post">
+                ✨ Generate Another Blog
+            </button>
         </div>
     </div>
 
@@ -301,12 +397,26 @@
         topicInput.addEventListener('input', () => {
             const length = topicInput.value.length;
             const maxLength = 200;
+            const minLength = 3;
             charCounter.textContent = `${length}/${maxLength}`;
             
+            // Visual feedback for character count
             if (length > maxLength * 0.9) {
+                charCounter.classList.add('warning');
+            } else if (length < minLength && length > 0) {
                 charCounter.classList.add('warning');
             } else {
                 charCounter.classList.remove('warning');
+            }
+        });
+
+        // Allow Enter key to submit form
+        topicInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (topicInput.value.trim().length >= 3) {
+                    form.dispatchEvent(new Event('submit'));
+                }
             }
         });
 
@@ -357,6 +467,7 @@
                 // Display the generated blog
                 if (data.blog) {
                     showBlogOutput(data.blog);
+                    showSuccess('Blog post generated successfully!');
                 } else {
                     showError('No blog content received');
                 }
@@ -381,10 +492,25 @@
         function showError(message) {
             error.textContent = message;
             error.style.display = 'block';
+            hideSuccess();
+            // Scroll to error for better UX
+            error.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
 
         function hideError() {
             error.style.display = 'none';
+        }
+
+        function showSuccess(message) {
+            const successMsg = document.getElementById('successMessage');
+            successMsg.textContent = message;
+            successMsg.style.display = 'block';
+            hideError();
+            setTimeout(() => hideSuccess(), 3000);
+        }
+
+        function hideSuccess() {
+            document.getElementById('successMessage').style.display = 'none';
         }
 
         function showBlogOutput(content) {
@@ -413,13 +539,29 @@
                 const originalText = copyBtn.textContent;
                 copyBtn.textContent = '✓ Copied!';
                 copyBtn.style.background = '#28a745';
+                showSuccess('Blog content copied to clipboard!');
                 
                 setTimeout(() => {
                     copyBtn.textContent = originalText;
                     copyBtn.style.background = '#667eea';
                 }, 2000);
             }).catch(err => {
-                showError('Failed to copy to clipboard');
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = content;
+                textArea.style.position = 'fixed';
+                textArea.style.opacity = '0';
+                document.body.appendChild(textArea);
+                textArea.select();
+                
+                try {
+                    document.execCommand('copy');
+                    showSuccess('Blog content copied to clipboard!');
+                } catch (fallbackErr) {
+                    showError('Failed to copy to clipboard. Please select and copy manually.');
+                }
+                
+                document.body.removeChild(textArea);
             });
         }
 
