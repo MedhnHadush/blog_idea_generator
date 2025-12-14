@@ -279,6 +279,39 @@
             transform: scale(0.98);
         }
 
+        .download-btn {
+            background: #17a2b8;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background 0.3s;
+            margin-left: 10px;
+        }
+
+        .download-btn:hover {
+            background: #138496;
+        }
+
+        .retry-btn {
+            background: #ffc107;
+            color: #333;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            margin-top: 15px;
+            transition: background 0.3s;
+        }
+
+        .retry-btn:hover {
+            background: #e0a800;
+        }
+
         .word-count {
             color: #666;
             font-size: 0.9em;
@@ -358,7 +391,12 @@
         </div>
 
         <!-- Error message display -->
-        <div class="error" id="error" role="alert" aria-live="assertive"></div>
+        <div class="error" id="error" role="alert" aria-live="assertive">
+            <div id="errorContent"></div>
+            <button class="retry-btn" id="retryBtn" onclick="retryGeneration()" style="display: none;">
+                🔄 Retry
+            </button>
+        </div>
         
         <!-- Success message display -->
         <div class="success-message" id="successMessage" role="status" aria-live="polite"></div>
@@ -369,9 +407,14 @@
                 <h2>Generated Blog Post:</h2>
                 <div class="blog-actions">
                     <span class="word-count" id="wordCount" aria-live="polite"></span>
-                    <button class="copy-btn" id="copyBtn" onclick="copyToClipboard()" aria-label="Copy blog content to clipboard">
-                        📋 Copy
-                    </button>
+                    <div>
+                        <button class="copy-btn" id="copyBtn" onclick="copyToClipboard()" aria-label="Copy blog content to clipboard">
+                            📋 Copy
+                        </button>
+                        <button class="download-btn" id="downloadBtn" onclick="downloadBlog()" aria-label="Download blog as text file">
+                            💾 Download
+                        </button>
+                    </div>
                 </div>
             </div>
             <div class="blog-content" id="blogContent"></div>
@@ -392,6 +435,8 @@
         const charCounter = document.getElementById('charCounter');
         const topicInput = document.getElementById('topic');
         const generateAnotherBtn = document.getElementById('generateAnotherBtn');
+        let currentAbortController = null;
+        let lastTopic = '';
 
         // Character counter for topic input
         topicInput.addEventListener('input', () => {
@@ -424,6 +469,11 @@
         form.addEventListener('submit', async (e) => {
             e.preventDefault(); // Prevent default form submission
             
+            // Cancel any ongoing request
+            if (currentAbortController) {
+                currentAbortController.abort();
+            }
+            
             // Get the topic from the input field
             const topic = document.getElementById('topic').value.trim();
             
@@ -431,6 +481,9 @@
                 showError('Please enter a blog topic');
                 return;
             }
+
+            // Store topic for retry
+            lastTopic = topic;
 
             // Hide previous results and errors
             hideError();
@@ -440,15 +493,19 @@
             showLoading();
             submitBtn.disabled = true;
 
+            // Create new AbortController for this request
+            currentAbortController = new AbortController();
+
             try {
                 // Create FormData to send the topic to the backend
                 const formData = new FormData();
                 formData.append('topic', topic);
 
-                // Send POST request to the Flask backend
+                // Send POST request to the Flask backend with timeout
                 const response = await fetch('/generate', {
                     method: 'POST',
-                    body: formData
+                    body: formData,
+                    signal: currentAbortController.signal
                 });
 
                 // Parse the JSON response
@@ -457,10 +514,11 @@
                 // Hide loading indicator
                 hideLoading();
                 submitBtn.disabled = false;
+                currentAbortController = null;
 
                 // Check if there was an error
                 if (!response.ok || data.error) {
-                    showError(data.error || 'Failed to generate blog post');
+                    showError(data.error || 'Failed to generate blog post', true);
                     return;
                 }
 
@@ -469,14 +527,20 @@
                     showBlogOutput(data.blog);
                     showSuccess('Blog post generated successfully!');
                 } else {
-                    showError('No blog content received');
+                    showError('No blog content received', true);
                 }
 
             } catch (err) {
                 // Handle network or other errors
                 hideLoading();
                 submitBtn.disabled = false;
-                showError('Network error: ' + err.message);
+                currentAbortController = null;
+                
+                if (err.name === 'AbortError') {
+                    showError('Request cancelled', false);
+                } else {
+                    showError('Network error: ' + err.message, true);
+                }
             }
         });
 
@@ -489,10 +553,15 @@
             loading.style.display = 'none';
         }
 
-        function showError(message) {
-            error.textContent = message;
+        function showError(message, showRetry = false) {
+            const errorContent = document.getElementById('errorContent');
+            const retryBtn = document.getElementById('retryBtn');
+            
+            errorContent.textContent = message;
             error.style.display = 'block';
+            retryBtn.style.display = showRetry ? 'block' : 'none';
             hideSuccess();
+            
             // Scroll to error for better UX
             error.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
@@ -586,6 +655,49 @@
             // Scroll to top smoothly
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
+
+        // Retry generation function
+        function retryGeneration() {
+            if (lastTopic) {
+                topicInput.value = lastTopic;
+                // Trigger character counter update
+                topicInput.dispatchEvent(new Event('input'));
+                // Submit form
+                form.dispatchEvent(new Event('submit'));
+            }
+        }
+
+        // Download blog as text file
+        function downloadBlog() {
+            const content = blogContent.textContent;
+            if (!content) {
+                showError('No content to download');
+                return;
+            }
+            
+            const topic = topicInput.value.trim() || 'blog_post';
+            const filename = topic.replace(/[^a-z0-9]/gi, '_').toLowerCase() + '.txt';
+            
+            // Create blob and download
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            
+            showSuccess('Blog downloaded successfully!');
+        }
+
+        // Cancel request on page unload
+        window.addEventListener('beforeunload', () => {
+            if (currentAbortController) {
+                currentAbortController.abort();
+            }
+        });
     </script>
 </body>
 </html>

@@ -5,9 +5,11 @@ A simple Flask application that generates blog posts using OpenAI API
 
 from flask import Flask, render_template, request, jsonify
 from openai import OpenAI
-from openai import APIError, RateLimitError, APIConnectionError
+from openai import APIError, RateLimitError, APIConnectionError, Timeout
 import os
+import re
 import logging
+from functools import wraps
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -29,6 +31,7 @@ MIN_TOPIC_LENGTH = 3
 MAX_TOKENS = 800
 TEMPERATURE = 0.7
 MODEL = "gpt-3.5-turbo"
+REQUEST_TIMEOUT = 60  # seconds
 
 # Initialize OpenAI client with API key from environment variable
 api_key = os.getenv('OPENAI_API_KEY')
@@ -36,7 +39,31 @@ if not api_key:
     logger.error("OPENAI_API_KEY not found in environment variables")
     raise ValueError("OPENAI_API_KEY environment variable is required")
 
-client = OpenAI(api_key=api_key)
+client = OpenAI(api_key=api_key, timeout=REQUEST_TIMEOUT)
+
+
+def sanitize_input(text):
+    """
+    Sanitize user input to prevent injection attacks
+    Remove potentially harmful characters while preserving content
+    """
+    if not text:
+        return ""
+    # Remove control characters except newlines and tabs
+    text = re.sub(r'[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f-\x9f]', '', text)
+    # Limit consecutive whitespace
+    text = re.sub(r'\s{3,}', ' ', text)
+    return text.strip()
+
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint for monitoring"""
+    return jsonify({
+        'status': 'healthy',
+        'service': 'AI Blog Generator',
+        'version': '1.0.0'
+    }), 200
 
 
 @app.route('/')
@@ -54,6 +81,9 @@ def generate_blog():
     try:
         # Get the blog topic from the form data
         topic = request.form.get('topic', '').strip()
+        
+        # Sanitize input
+        topic = sanitize_input(topic)
         
         # Validate topic length
         if not topic:
@@ -102,6 +132,11 @@ def generate_blog():
             return jsonify({
                 'error': 'API rate limit exceeded. Please try again in a moment.'
             }), 429
+        except Timeout as e:
+            logger.error(f"Request timeout: {str(e)}")
+            return jsonify({
+                'error': 'Request timed out. The AI service is taking too long to respond. Please try again.'
+            }), 504
         except APIConnectionError as e:
             logger.error(f"API connection error: {str(e)}")
             return jsonify({
@@ -109,6 +144,11 @@ def generate_blog():
             }), 503
         except APIError as e:
             logger.error(f"OpenAI API error: {str(e)}")
+            error_msg = str(e).lower()
+            if 'invalid api key' in error_msg or 'authentication' in error_msg:
+                return jsonify({
+                    'error': 'Invalid API key. Please check your configuration.'
+                }), 401
             return jsonify({
                 'error': 'Error communicating with AI service. Please try again later.'
             }), 500
