@@ -106,6 +106,21 @@
             display: none;
         }
 
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 10px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
         .error {
             background: #fee;
             color: #c33;
@@ -124,10 +139,48 @@
             display: none;
         }
 
+        .blog-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
         .blog-output h2 {
             color: #333;
-            margin-bottom: 15px;
             font-size: 1.8em;
+            margin: 0;
+        }
+
+        .blog-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .copy-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background 0.3s;
+        }
+
+        .copy-btn:hover {
+            background: #5568d3;
+        }
+
+        .copy-btn:active {
+            transform: scale(0.98);
+        }
+
+        .word-count {
+            color: #666;
+            font-size: 0.9em;
+            font-style: italic;
         }
 
         .blog-content {
@@ -160,7 +213,8 @@
 
         <!-- Loading indicator -->
         <div class="loading" id="loading">
-            Generating your blog post... Please wait.
+            <div class="spinner"></div>
+            <p>Generating your blog post... Please wait.</p>
         </div>
 
         <!-- Error message display -->
@@ -168,7 +222,13 @@
 
         <!-- Generated blog output -->
         <div class="blog-output" id="blogOutput">
-            <h2>Generated Blog Post:</h2>
+            <div class="blog-header">
+                <h2>Generated Blog Post:</h2>
+                <div class="blog-actions">
+                    <span class="word-count" id="wordCount"></span>
+                    <button class="copy-btn" id="copyBtn" onclick="copyToClipboard()">📋 Copy</button>
+                </div>
+            </div>
             <div class="blog-content" id="blogContent"></div>
         </div>
     </div>
@@ -262,8 +322,36 @@
         function showBlogOutput(content) {
             blogContent.textContent = content;
             blogOutput.style.display = 'block';
+            
+            // Calculate and display word count
+            const wordCount = content.trim().split(/\s+/).filter(word => word.length > 0).length;
+            document.getElementById('wordCount').textContent = `${wordCount} words`;
+            
             // Scroll to the blog output
             blogOutput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        // Copy blog content to clipboard
+        function copyToClipboard() {
+            const content = blogContent.textContent;
+            if (!content) {
+                showError('No content to copy');
+                return;
+            }
+            
+            navigator.clipboard.writeText(content).then(() => {
+                const copyBtn = document.getElementById('copyBtn');
+                const originalText = copyBtn.textContent;
+                copyBtn.textContent = '✓ Copied!';
+                copyBtn.style.background = '#28a745';
+                
+                setTimeout(() => {
+                    copyBtn.textContent = originalText;
+                    copyBtn.style.background = '#667eea';
+                }, 2000);
+            }).catch(err => {
+                showError('Failed to copy to clipboard');
+            });
         }
 
         function hideBlogOutput() {
