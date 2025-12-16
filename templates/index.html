@@ -295,6 +295,60 @@
             background: #138496;
         }
 
+        .export-menu {
+            position: relative;
+            display: inline-block;
+        }
+
+        .export-dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 5px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 1000;
+            min-width: 180px;
+        }
+
+        .export-dropdown.show {
+            display: block;
+        }
+
+        .export-option {
+            padding: 10px 15px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+            transition: background 0.2s;
+        }
+
+        .export-option:last-child {
+            border-bottom: none;
+        }
+
+        .export-option:hover {
+            background: #f8f9fa;
+        }
+
+        .share-btn {
+            background: #6f42c1;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background 0.3s;
+            margin-left: 10px;
+        }
+
+        .share-btn:hover {
+            background: #5a32a3;
+        }
+
         .retry-btn {
             background: #ffc107;
             color: #333;
@@ -542,8 +596,18 @@
                         <button class="copy-btn" id="copyBtn" onclick="copyToClipboard()" aria-label="Copy blog content to clipboard">
                             📋 Copy
                         </button>
-                        <button class="download-btn" id="downloadBtn" onclick="downloadBlog()" aria-label="Download blog as text file">
-                            💾 Download
+                        <div class="export-menu">
+                            <button class="download-btn" id="downloadBtn" onclick="toggleExportMenu()" aria-label="Export blog">
+                                💾 Export
+                            </button>
+                            <div class="export-dropdown" id="exportDropdown">
+                                <div class="export-option" onclick="downloadBlog('txt')">📄 Download as TXT</div>
+                                <div class="export-option" onclick="downloadBlog('md')">📝 Download as Markdown</div>
+                                <div class="export-option" onclick="downloadBlog('html')">🌐 Download as HTML</div>
+                            </div>
+                        </div>
+                        <button class="share-btn" id="shareBtn" onclick="shareBlog()" aria-label="Share blog">
+                            🔗 Share
                         </button>
                     </div>
                 </div>
@@ -977,8 +1041,31 @@
             }
         }
 
-        // Download blog as text file
-        function downloadBlog() {
+        // Toggle export menu
+        function toggleExportMenu() {
+            const dropdown = document.getElementById('exportDropdown');
+            dropdown.classList.toggle('show');
+            
+            // Close when clicking outside
+            if (dropdown.classList.contains('show')) {
+                setTimeout(() => {
+                    document.addEventListener('click', closeExportMenu);
+                }, 0);
+            }
+        }
+
+        function closeExportMenu(e) {
+            const dropdown = document.getElementById('exportDropdown');
+            const downloadBtn = document.getElementById('downloadBtn');
+            
+            if (!dropdown.contains(e.target) && e.target !== downloadBtn) {
+                dropdown.classList.remove('show');
+                document.removeEventListener('click', closeExportMenu);
+            }
+        }
+
+        // Download blog in different formats
+        function downloadBlog(format = 'txt') {
             const content = blogContent.textContent;
             if (!content) {
                 showError('No content to download');
@@ -986,10 +1073,43 @@
             }
             
             const topic = topicInput.value.trim() || 'blog_post';
-            const filename = topic.replace(/[^a-z0-9]/gi, '_').toLowerCase() + '.txt';
+            const sanitizedTopic = topic.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+            let filename, fileContent, mimeType;
+            
+            switch(format) {
+                case 'md':
+                    filename = `${sanitizedTopic}.md`;
+                    fileContent = `# ${topic}\n\n${content.split('\n').map(line => line.trim() ? line : '').join('\n')}`;
+                    mimeType = 'text/markdown';
+                    break;
+                case 'html':
+                    filename = `${sanitizedTopic}.html`;
+                    fileContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${topic}</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; line-height: 1.6; }
+        h1 { color: #333; }
+    </style>
+</head>
+<body>
+    <h1>${topic}</h1>
+    <div>${content.split('\n').map(line => line.trim() ? `<p>${line}</p>` : '').join('\n')}</div>
+</body>
+</html>`;
+                    mimeType = 'text/html';
+                    break;
+                default: // txt
+                    filename = `${sanitizedTopic}.txt`;
+                    fileContent = `${topic}\n\n${content}`;
+                    mimeType = 'text/plain';
+            }
             
             // Create blob and download
-            const blob = new Blob([content], { type: 'text/plain' });
+            const blob = new Blob([fileContent], { type: mimeType });
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -999,7 +1119,50 @@
             document.body.removeChild(a);
             window.URL.revokeObjectURL(url);
             
-            showSuccess('Blog downloaded successfully!');
+            // Close export menu
+            document.getElementById('exportDropdown').classList.remove('show');
+            showSuccess(`Blog downloaded as ${format.toUpperCase()}!`);
+        }
+
+        // Share blog functionality
+        function shareBlog() {
+            const content = blogContent.textContent;
+            const topic = topicInput.value.trim() || 'Blog Post';
+            
+            if (!content) {
+                showError('No content to share');
+                return;
+            }
+            
+            const shareText = `${topic}\n\n${content.substring(0, 200)}...`;
+            
+            // Check if Web Share API is available
+            if (navigator.share) {
+                navigator.share({
+                    title: topic,
+                    text: shareText,
+                    url: window.location.href
+                }).then(() => {
+                    showSuccess('Blog shared successfully!');
+                }).catch((err) => {
+                    if (err.name !== 'AbortError') {
+                        // Fallback to clipboard
+                        fallbackShare(content, topic);
+                    }
+                });
+            } else {
+                // Fallback to clipboard
+                fallbackShare(content, topic);
+            }
+        }
+
+        function fallbackShare(content, topic) {
+            const shareText = `${topic}\n\n${content}`;
+            navigator.clipboard.writeText(shareText).then(() => {
+                showSuccess('Blog content copied to clipboard! You can now paste and share it.');
+            }).catch(() => {
+                showError('Sharing not supported. Please copy manually.');
+            });
         }
 
         // Cancel request on page unload
