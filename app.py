@@ -9,7 +9,9 @@ from openai import APIError, RateLimitError, APIConnectionError, Timeout
 import os
 import re
 import logging
+import time
 from functools import wraps
+from datetime import datetime
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -41,6 +43,15 @@ if not api_key:
 
 client = OpenAI(api_key=api_key, timeout=REQUEST_TIMEOUT)
 
+# Request statistics tracking
+request_stats = {
+    'total_requests': 0,
+    'successful_requests': 0,
+    'failed_requests': 0,
+    'total_tokens_used': 0,
+    'start_time': datetime.now().isoformat()
+}
+
 
 def sanitize_input(text):
     """
@@ -62,8 +73,37 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'service': 'AI Blog Generator',
-        'version': '1.0.0'
+        'version': '1.0.0',
+        'uptime': str(datetime.now() - datetime.fromisoformat(request_stats['start_time'])),
+        'statistics': {
+            'total_requests': request_stats['total_requests'],
+            'successful_requests': request_stats['successful_requests'],
+            'failed_requests': request_stats['failed_requests']
+        }
     }), 200
+
+
+@app.route('/suggestions', methods=['GET'])
+def get_topic_suggestions():
+    """Get topic suggestions for users"""
+    suggestions = [
+        "The Future of Artificial Intelligence",
+        "Sustainable Living Practices",
+        "Remote Work Productivity Tips",
+        "Mental Health and Wellness",
+        "Climate Change Solutions",
+        "Digital Marketing Strategies",
+        "Healthy Eating Habits",
+        "Entrepreneurship Basics",
+        "Technology Trends 2024",
+        "Personal Finance Management",
+        "Creative Writing Techniques",
+        "Social Media Best Practices",
+        "Travel Destinations to Visit",
+        "Fitness and Exercise Routines",
+        "Learning New Skills Online"
+    ]
+    return jsonify({'suggestions': suggestions}), 200
 
 
 @app.route('/')
@@ -78,6 +118,9 @@ def generate_blog():
     Generate a blog post based on the topic provided by the user
     Returns JSON response with generated blog content or error message
     """
+    start_time = time.time()
+    request_stats['total_requests'] += 1
+    
     try:
         # Get the blog topic from the form data
         topic = request.form.get('topic', '').strip()
@@ -128,21 +171,25 @@ def generate_blog():
                 temperature=TEMPERATURE
             )
         except RateLimitError as e:
+            request_stats['failed_requests'] += 1
             logger.error(f"Rate limit error: {str(e)}")
             return jsonify({
                 'error': 'API rate limit exceeded. Please try again in a moment.'
             }), 429
         except Timeout as e:
+            request_stats['failed_requests'] += 1
             logger.error(f"Request timeout: {str(e)}")
             return jsonify({
                 'error': 'Request timed out. The AI service is taking too long to respond. Please try again.'
             }), 504
         except APIConnectionError as e:
+            request_stats['failed_requests'] += 1
             logger.error(f"API connection error: {str(e)}")
             return jsonify({
                 'error': 'Connection error. Please check your internet connection and try again.'
             }), 503
         except APIError as e:
+            request_stats['failed_requests'] += 1
             logger.error(f"OpenAI API error: {str(e)}")
             error_msg = str(e).lower()
             if 'invalid api key' in error_msg or 'authentication' in error_msg:
@@ -155,24 +202,35 @@ def generate_blog():
         
         # Extract the generated blog content
         if not response.choices or not response.choices[0].message.content:
+            request_stats['failed_requests'] += 1
             logger.error("Empty response from OpenAI API")
             return jsonify({'error': 'Received empty response from AI service'}), 500
         
         blog_content = response.choices[0].message.content.strip()
         
-        logger.info(f"Successfully generated blog post ({len(blog_content)} characters)")
+        # Update statistics
+        request_stats['successful_requests'] += 1
+        if hasattr(response, 'usage') and response.usage:
+            request_stats['total_tokens_used'] += response.usage.total_tokens
+        
+        processing_time = round(time.time() - start_time, 2)
+        logger.info(f"Successfully generated blog post ({len(blog_content)} characters) in {processing_time}s")
         
         # Return the generated blog as JSON
         return jsonify({
             'blog': blog_content,
             'topic': topic,
-            'word_count': len(blog_content.split())
+            'word_count': len(blog_content.split()),
+            'processing_time': processing_time,
+            'tokens_used': response.usage.total_tokens if hasattr(response, 'usage') and response.usage else None
         })
     
     except ValueError as e:
+        request_stats['failed_requests'] += 1
         logger.error(f"Validation error: {str(e)}")
         return jsonify({'error': str(e)}), 400
     except Exception as e:
+        request_stats['failed_requests'] += 1
         logger.error(f"Unexpected error: {str(e)}", exc_info=True)
         return jsonify({
             'error': 'An unexpected error occurred. Please try again later.'

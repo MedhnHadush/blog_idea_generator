@@ -312,6 +312,50 @@
             background: #e0a800;
         }
 
+        .topic-suggestions {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f0f4ff;
+            border-radius: 8px;
+            border: 1px solid #e0e7ff;
+        }
+
+        .topic-suggestions h3 {
+            font-size: 0.95em;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .suggestions-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .suggestion-chip {
+            background: white;
+            border: 1px solid #667eea;
+            color: #667eea;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .suggestion-chip:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        .processing-info {
+            margin-top: 10px;
+            font-size: 0.9em;
+            color: #666;
+            font-style: italic;
+        }
+
         .word-count {
             color: #666;
             font-size: 0.9em;
@@ -373,6 +417,16 @@
                 <small id="topicHelp" style="color: #666; font-size: 0.9em; margin-top: 5px; display: block;">
                     Enter a topic (3-200 characters) to generate a blog post
                 </small>
+                <div class="topic-suggestions" id="topicSuggestions">
+                    <h3>💡 Topic Suggestions:</h3>
+                    <div class="suggestions-list" id="suggestionsList">
+                        <span class="suggestion-chip" onclick="useSuggestion('The Future of Artificial Intelligence')">The Future of AI</span>
+                        <span class="suggestion-chip" onclick="useSuggestion('Sustainable Living Practices')">Sustainable Living</span>
+                        <span class="suggestion-chip" onclick="useSuggestion('Remote Work Productivity Tips')">Remote Work Tips</span>
+                        <span class="suggestion-chip" onclick="useSuggestion('Mental Health and Wellness')">Mental Health</span>
+                        <span class="suggestion-chip" onclick="useSuggestion('Climate Change Solutions')">Climate Change</span>
+                    </div>
+                </div>
             </div>
             <div class="button-group">
                 <button type="submit" id="submitBtn" aria-label="Generate blog post">
@@ -388,6 +442,7 @@
         <div class="loading" id="loading">
             <div class="spinner"></div>
             <p>Generating your blog post... Please wait.</p>
+            <div class="processing-info" id="processingInfo"></div>
         </div>
 
         <!-- Error message display -->
@@ -524,7 +579,7 @@
 
                 // Display the generated blog
                 if (data.blog) {
-                    showBlogOutput(data.blog);
+                    showBlogOutput(data.blog, data.processing_time);
                     showSuccess('Blog post generated successfully!');
                 } else {
                     showError('No blog content received', true);
@@ -582,18 +637,27 @@
             document.getElementById('successMessage').style.display = 'none';
         }
 
-        function showBlogOutput(content) {
+        function showBlogOutput(content, processingTime = null) {
             blogContent.textContent = content;
             blogOutput.style.display = 'block';
             generateAnotherBtn.style.display = 'block';
             
             // Calculate and display word count
             const wordCount = content.trim().split(/\s+/).filter(word => word.length > 0).length;
-            document.getElementById('wordCount').textContent = `${wordCount} words`;
+            let wordCountText = `${wordCount} words`;
+            if (processingTime) {
+                wordCountText += ` • Generated in ${processingTime}s`;
+            }
+            document.getElementById('wordCount').textContent = wordCountText;
             
             // Scroll to the blog output
             blogOutput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
+
+        // Load suggestions on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            loadSuggestions();
+        });
 
         // Copy blog content to clipboard
         function copyToClipboard() {
@@ -654,6 +718,44 @@
             clearForm();
             // Scroll to top smoothly
             window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // Use suggestion function
+        function useSuggestion(topic) {
+            topicInput.value = topic;
+            topicInput.dispatchEvent(new Event('input'));
+            topicInput.focus();
+            showSuccess('Topic suggestion applied! Click Generate to create your blog.');
+        }
+
+        // Load suggestions from API
+        async function loadSuggestions() {
+            try {
+                const response = await fetch('/suggestions');
+                const data = await response.json();
+                if (data.suggestions) {
+                    const suggestionsList = document.getElementById('suggestionsList');
+                    suggestionsList.innerHTML = '';
+                    data.suggestions.slice(0, 5).forEach(suggestion => {
+                        const chip = document.createElement('span');
+                        chip.className = 'suggestion-chip';
+                        chip.textContent = suggestion.length > 30 ? suggestion.substring(0, 30) + '...' : suggestion;
+                        chip.onclick = () => useSuggestion(suggestion);
+                        suggestionsList.appendChild(chip);
+                    });
+                }
+            } catch (err) {
+                // Use default suggestions if API fails
+                console.log('Could not load suggestions from API');
+            }
+        }
+
+        // Show processing time
+        function updateProcessingInfo(time) {
+            const processingInfo = document.getElementById('processingInfo');
+            if (time) {
+                processingInfo.textContent = `Processing time: ${time}s`;
+            }
         }
 
         // Retry generation function
