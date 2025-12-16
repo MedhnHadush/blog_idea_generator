@@ -356,6 +356,82 @@
             font-style: italic;
         }
 
+        .history-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            display: none;
+        }
+
+        .history-section h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .history-item {
+            background: white;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            border-left: 3px solid #667eea;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .history-item:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transform: translateX(5px);
+        }
+
+        .history-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        .history-topic {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .history-date {
+            font-size: 0.85em;
+            color: #999;
+        }
+
+        .history-actions {
+            display: flex;
+            gap: 5px;
+            margin-top: 10px;
+        }
+
+        .history-btn {
+            padding: 4px 10px;
+            font-size: 0.8em;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .view-history-btn {
+            background: #6c757d;
+            color: white;
+            margin-top: 15px;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+
+        .view-history-btn:hover {
+            background: #5a6268;
+        }
+
         .word-count {
             color: #666;
             font-size: 0.9em;
@@ -477,6 +553,13 @@
                 ✨ Generate Another Blog
             </button>
         </div>
+
+        <!-- Blog History Section -->
+        <div class="history-section" id="historySection">
+            <h3>📚 Recent Blog Posts</h3>
+            <div id="historyList"></div>
+            <button class="view-history-btn" onclick="clearHistory()">🗑️ Clear History</button>
+        </div>
     </div>
 
     <script>
@@ -492,6 +575,8 @@
         const generateAnotherBtn = document.getElementById('generateAnotherBtn');
         let currentAbortController = null;
         let lastTopic = '';
+        const HISTORY_KEY = 'blog_generator_history';
+        const MAX_HISTORY = 10;
 
         // Character counter for topic input
         topicInput.addEventListener('input', () => {
@@ -650,13 +735,136 @@
             }
             document.getElementById('wordCount').textContent = wordCountText;
             
+            // Save to history
+            saveToHistory(topicInput.value.trim(), content, processingTime);
+            
             // Scroll to the blog output
             blogOutput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
 
-        // Load suggestions on page load
+        // History management functions
+        function saveToHistory(topic, content, processingTime) {
+            try {
+                let history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+                
+                const historyItem = {
+                    topic: topic,
+                    content: content,
+                    timestamp: new Date().toISOString(),
+                    wordCount: content.trim().split(/\s+/).filter(word => word.length > 0).length,
+                    processingTime: processingTime
+                };
+                
+                // Add to beginning of array
+                history.unshift(historyItem);
+                
+                // Keep only last MAX_HISTORY items
+                if (history.length > MAX_HISTORY) {
+                    history = history.slice(0, MAX_HISTORY);
+                }
+                
+                localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+                displayHistory();
+            } catch (err) {
+                console.error('Error saving to history:', err);
+            }
+        }
+
+        function loadHistory() {
+            try {
+                return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+            } catch (err) {
+                console.error('Error loading history:', err);
+                return [];
+            }
+        }
+
+        function displayHistory() {
+            const history = loadHistory();
+            const historyList = document.getElementById('historyList');
+            const historySection = document.getElementById('historySection');
+            
+            if (history.length === 0) {
+                historySection.style.display = 'none';
+                return;
+            }
+            
+            historySection.style.display = 'block';
+            historyList.innerHTML = '';
+            
+            history.forEach((item, index) => {
+                const historyItem = document.createElement('div');
+                historyItem.className = 'history-item';
+                
+                const date = new Date(item.timestamp);
+                const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                
+                historyItem.innerHTML = `
+                    <div class="history-item-header">
+                        <span class="history-topic">${item.topic}</span>
+                        <span class="history-date">${dateStr}</span>
+                    </div>
+                    <div style="font-size: 0.85em; color: #666; margin-top: 5px;">
+                        ${item.wordCount} words${item.processingTime ? ` • ${item.processingTime}s` : ''}
+                    </div>
+                    <div class="history-actions">
+                        <button class="history-btn" style="background: #667eea; color: white;" onclick="loadFromHistory(${index})">View</button>
+                        <button class="history-btn" style="background: #28a745; color: white;" onclick="copyFromHistory(${index})">Copy</button>
+                        <button class="history-btn" style="background: #dc3545; color: white;" onclick="deleteFromHistory(${index})">Delete</button>
+                    </div>
+                `;
+                
+                historyList.appendChild(historyItem);
+            });
+        }
+
+        function loadFromHistory(index) {
+            const history = loadHistory();
+            if (history[index]) {
+                const item = history[index];
+                topicInput.value = item.topic;
+                topicInput.dispatchEvent(new Event('input'));
+                showBlogOutput(item.content, item.processingTime);
+                showSuccess('Blog loaded from history!');
+                blogOutput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+
+        function copyFromHistory(index) {
+            const history = loadHistory();
+            if (history[index]) {
+                navigator.clipboard.writeText(history[index].content).then(() => {
+                    showSuccess('Blog content copied to clipboard!');
+                }).catch(() => {
+                    showError('Failed to copy to clipboard');
+                });
+            }
+        }
+
+        function deleteFromHistory(index) {
+            try {
+                let history = loadHistory();
+                history.splice(index, 1);
+                localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+                displayHistory();
+                showSuccess('Blog removed from history');
+            } catch (err) {
+                showError('Failed to delete from history');
+            }
+        }
+
+        function clearHistory() {
+            if (confirm('Are you sure you want to clear all history?')) {
+                localStorage.removeItem(HISTORY_KEY);
+                displayHistory();
+                showSuccess('History cleared');
+            }
+        }
+
+        // Load suggestions and history on page load
         window.addEventListener('DOMContentLoaded', () => {
             loadSuggestions();
+            displayHistory();
         });
 
         // Copy blog content to clipboard
